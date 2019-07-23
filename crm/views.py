@@ -3,6 +3,7 @@ from .models import *
 from .forms import *
 from django.shortcuts import redirect
 from django.contrib.auth.decorators import login_required
+from django.db.models import Sum
 
 now = timezone.now()
 def home(request):
@@ -85,3 +86,78 @@ def service_delete(request, pk):
    service = get_object_or_404(Service, pk=pk)
    service.delete()
    return redirect('crm:service_list')
+
+@login_required
+def product_list(request):
+   products = Product.objects.filter(created_date__lte=timezone.now())
+   return render(request, 'crm/product_list.html', {'products': products})
+
+@login_required
+def product_new(request):
+   if request.method == "POST":
+       form = ProductForm(request.POST)
+       if form.is_valid():
+           product = form.save(commit=False)
+           product.created_date = timezone.now()
+           product.save()
+           products = Product.objects.filter(created_date__lte=timezone.now())
+           return render(request, 'crm/product_list.html',
+                         {'products': products})
+   else:
+       form = ProductForm()
+       # print("Else")
+   return render(request, 'crm/product_new.html', {'form': form})
+
+@login_required
+def product_edit(request, pk):
+   product = get_object_or_404(Product, pk=pk)
+   if request.method == "POST":
+       form = ProductForm(request.POST, instance=product)
+       if form.is_valid():
+           product = form.save()
+           # service.customer = service.id
+           product.updated_date = timezone.now()
+           product.save()
+           products = Product.objects.filter(created_date__lte=timezone.now())
+           return render(request, 'crm/product_list.html', {'products': products})
+   else:
+       # print("else")
+       form = ProductForm(instance=product)
+   return render(request, 'crm/product_edit.html', {'form': form})
+
+
+@login_required
+def product_delete(request, pk):
+   product = get_object_or_404(Product, pk=pk)
+   product.delete()
+   return redirect('crm:product_list')
+
+def signup(request):
+    if request.method == 'POST':
+        form = UserSignUpForm(request.POST)
+        if form.is_valid():
+            user = form.save(commit=False)
+            user.set_password(form.cleaned_data['password'])
+            user.save()
+            return render(request, 'registration/register_done.html', {'user': user})
+    else:
+        form = UserSignUpForm()
+    return render(request,'registration/register.html',{'form': form})
+
+
+@login_required
+def summary(request, pk):
+    customer = get_object_or_404(Customer, pk=pk)
+    customers = Customer.objects.filter(created_date__lte=timezone.now())
+    services = Service.objects.filter(cust_name=pk)
+    products = Product.objects.filter(cust_name=pk)
+    sum_service_charge = Service.objects.filter(cust_name=pk).aggregate(Sum('service_charge'))
+    sum_product_charge = Product.objects.filter(cust_name=pk).aggregate(Sum('charge'))
+    total_charge = sum_service_charge['service_charge__sum'] + sum_product_charge['charge__sum']
+    return render(request, 'crm/summary.html', {'customers': customers,
+                                                    'products': products,
+                                                    'services': services,
+                                                    'sum_service_charge': sum_service_charge,
+                                                    'sum_product_charge': sum_product_charge,
+                                                    'total_charge':total_charge,
+                                                    'primary_key':pk})
